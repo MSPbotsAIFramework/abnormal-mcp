@@ -1,0 +1,65 @@
+# Copyright 2026 MSPbots.ai
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Cases: account-takeover investigations (Account Takeover license)."""
+
+from typing import Annotated
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import Field
+
+from ..api_client import AbnormalClient
+from ._common import (
+    READ_ONLY,
+    ClientFactory,
+    PageNumber,
+    PageSize,
+    filter_arg,
+    page_params,
+    paged_result,
+    path_id,
+    run_tool,
+)
+
+
+def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
+    @mcp.tool(annotations=READ_ONLY)
+    async def abnormal_cases_list(
+        pageSize: PageSize = None,
+        pageNumber: PageNumber = None,
+        filter: filter_arg("lastModifiedTime") = None,
+    ) -> str:
+        """List account-takeover cases (case ID, severity, affected employee).
+
+        Needs the Account Takeover license. Without `filter` only the latest
+        100 cases are returned.
+        """
+
+        async def action(client: AbnormalClient) -> dict:
+            params = {"filter": filter}
+            if filter:
+                params |= page_params(pageSize, pageNumber)
+            return paged_result(await client.get("/cases", params), "cases")
+
+        return await run_tool("abnormal_cases_list", client_factory, action)
+
+    @mcp.tool(annotations=READ_ONLY)
+    async def abnormal_cases_get(
+        caseId: Annotated[str, Field(description="Case ID from abnormal_cases_list.")],
+    ) -> str:
+        """Get one case: status, severity, affected employee, related threat IDs and analysis."""
+
+        async def action(client: AbnormalClient) -> dict:
+            return await client.get(f"/cases/{path_id(caseId)}")
+
+        return await run_tool("abnormal_cases_get", client_factory, action)
