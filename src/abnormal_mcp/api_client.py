@@ -100,6 +100,9 @@ class AbnormalError(Exception):
 class AbnormalCredentials:
     token: str
     region: str = DEFAULT_REGION
+    # Set when a header value is malformed: tools then return invalid_argument
+    # instead of calling Abnormal, while tools/list still works.
+    header_error: str | None = None
 
     def __repr__(self) -> str:  # never leak the token into logs or tracebacks
         return f"AbnormalCredentials(token=<redacted>, region={self.region!r})"
@@ -111,6 +114,7 @@ class AbnormalClient:
     def __init__(self, credentials: AbnormalCredentials, http_client: httpx.AsyncClient | None = None):
         self._credentials = credentials
         self._http = http_client
+        self.header_error = credentials.header_error
         self.base_url = REGION_BASE_URLS[credentials.region]
 
     @property

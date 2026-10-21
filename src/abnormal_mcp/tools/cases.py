@@ -55,11 +55,14 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
 
     @mcp.tool(annotations=READ_ONLY)
     async def abnormal_cases_get(
-        caseId: Annotated[str, Field(description="Case ID from abnormal_cases_list.")],
+        caseId: Annotated[int | str, Field(description="Case ID from abnormal_cases_list (number or string).")],
     ) -> str:
         """Get one case: status, severity, affected employee, related threat IDs and analysis."""
 
         async def action(client: AbnormalClient) -> dict:
-            return await client.get(f"/cases/{path_id(caseId)}")
+            case_id = str(caseId).strip()
+            if not case_id:
+                raise ValueError("caseId must not be blank")
+            return await client.get(f"/cases/{path_id(case_id)}")
 
         return await run_tool("abnormal_cases_get", client_factory, action)

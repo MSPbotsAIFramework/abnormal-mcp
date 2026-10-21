@@ -86,7 +86,8 @@ def _token_from_header(value: str | None) -> str:
 class GatewayCredentialsMiddleware:
     """Reads the Abnormal token from the Authorization header on /mcp requests.
 
-    Missing token -> 401 listing the required header; unknown region -> 400.
+    Missing token -> 401 listing the required header. An unknown region does not
+    block the request (tools/list must work with any values); tools report it instead.
     """
 
     def __init__(self, app: ASGIApp):
@@ -113,19 +114,13 @@ class GatewayCredentialsMiddleware:
             )(scope, receive, send)
             return
 
+        header_error = None
         if region not in REGION_BASE_URLS:
-            await JSONResponse(
-                {
-                    "error": "Invalid region",
-                    "message": f"{HEADER_REGION} must be one of: {', '.join(REGION_BASE_URLS)}",
-                    "allowed_values": list(REGION_BASE_URLS),
-                },
-                status_code=400,
-            )(scope, receive, send)
-            return
+            header_error = f"{HEADER_REGION} must be one of: {', '.join(REGION_BASE_URLS)}"
+            region = DEFAULT_REGION
 
         request_id = (request.headers.get("x-request-id") or "").strip()[:64] or uuid.uuid4().hex[:12]
-        creds_token = _credentials_var.set(AbnormalCredentials(token, region))
+        creds_token = _credentials_var.set(AbnormalCredentials(token, region, header_error))
         rid_token = request_id_var.set(request_id)
         try:
             await self.app(scope, receive, send)

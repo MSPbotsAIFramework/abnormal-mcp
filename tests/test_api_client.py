@@ -189,3 +189,23 @@ async def test_remediation_status_with_action_id(monkeypatch):
 async def test_status_maps_401(monkeypatch):
     _use_mock(monkeypatch, lambda r: httpx.Response(401, json={"message": "Unauthorized"}))
     assert (await _call("abnormal_status", {}))["error"]["code"] == "unauthorized"
+
+
+@pytest.mark.parametrize("case_id", [19377, "19377", " 19377 "])
+async def test_cases_get_accepts_number_or_string(monkeypatch, case_id):
+    paths = []
+
+    def handler(request):
+        paths.append(request.url.path)
+        return httpx.Response(200, json={"caseId": "19377"})
+
+    _use_mock(monkeypatch, handler)
+    result = await _call("abnormal_cases_get", {"caseId": case_id})
+    assert result == {"caseId": "19377"}
+    assert paths == ["/v1/cases/19377"]
+
+
+async def test_cases_get_rejects_blank_id(monkeypatch):
+    _use_mock(monkeypatch, lambda r: pytest.fail("API must not be called"))
+    result = await _call("abnormal_cases_get", {"caseId": "  "})
+    assert result["error"]["code"] == "invalid_argument"

@@ -27,8 +27,9 @@ Where to get them:
   calls from other addresses fail with `unauthorized`.
 - **Licenses**: the case tools need Abnormal's Account Takeover license.
 
-A request to `/mcp` without a token gets HTTP 401 listing the required header; an unknown region
-gets HTTP 400.
+A request to `/mcp` without a token gets HTTP 401 listing the required header. An unknown region
+does not block `tools/list`; tools then return an `invalid_argument` error naming the allowed
+regions.
 
 ## Tools
 

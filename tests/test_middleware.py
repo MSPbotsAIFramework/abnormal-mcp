@@ -52,12 +52,25 @@ def test_missing_token_returns_401(value):
     assert resp.json()["required_headers"] == ["Authorization"]
 
 
-def test_unknown_region_returns_400():
+def test_unknown_region_still_lists_tools():
+    # The admin console refreshes the tool catalog with placeholder header values.
+    headers = {"Authorization": "placeholder", "X-Abnormal-Region": "placeholder"}
+    with _client() as client:
+        resp = client.post("/mcp", json=LIST_TOOLS, headers=MCP_HEADERS | headers)
+    assert resp.status_code == 200
+    assert "abnormal_threats_list" in resp.text
+
+
+def test_unknown_region_is_reported_by_tools():
+    seen = _run_middleware([(b"authorization", b"tok"), (b"x-abnormal-region", b"apac")])
+    assert seen["client"].header_error == "X-Abnormal-Region must be one of: us, eu"
+    call = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "abnormal_status", "arguments": {}}}
     headers = MCP_HEADERS | {"Authorization": "Bearer YOUR_API_TOKEN", "X-Abnormal-Region": "apac"}
     with _client() as client:
-        resp = client.post("/mcp", json=LIST_TOOLS, headers=headers)
-    assert resp.status_code == 400
-    assert resp.json()["allowed_values"] == ["us", "eu"]
+        resp = client.post("/mcp", json=call, headers=headers)
+    assert resp.status_code == 200
+    assert '\\"invalid_argument\\"' in resp.text
+    assert "X-Abnormal-Region must be one of: us, eu" in resp.text
 
 
 def test_tools_list_over_http_with_token():

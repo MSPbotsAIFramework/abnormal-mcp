@@ -111,3 +111,8 @@ def test_error_envelope_mapping(status_code, expected_code, expected_retryable):
     assert envelope == {
         "error": {"code": expected_code, "message": "boom", "retryable": expected_retryable}
     }
+
+
+def test_cases_get_advertises_integer_and_string(tools):
+    schema = tools["abnormal_cases_get"].inputSchema["properties"]["caseId"]
+    assert {option["type"] for option in schema["anyOf"]} == {"integer", "string"}
