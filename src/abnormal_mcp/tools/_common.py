@@ -43,6 +43,13 @@ PageSize = Annotated[
     Field(description=f"Results per page (default {DEFAULT_PAGE_SIZE}, max {MAX_PAGE_SIZE}). Needs `filter`."),
 ]
 PageNumber = Annotated[int | None, Field(description="1-based page number (default 1). Needs `filter`.")]
+Offset = Annotated[
+    int | None,
+    Field(
+        description="Record position to start from (0-based, overrides pageNumber); pass next_offset from the previous result.",
+        ge=0,
+    ),
+]
 
 
 def filter_arg(keys: str) -> Any:
@@ -62,18 +69,42 @@ def page_params(page_size: int | None, page_number: int | None) -> dict[str, Any
     return {"pageSize": size, "pageNumber": max(1, int(page_number or 1))}
 
 
-def paged_result(document: Any, key: str) -> dict[str, Any]:
-    """Shape an Abnormal list response as ``{items, count, page, has_more, next_page}``."""
+def locate(offset: int | None, page_number: int | None, page_size: int | None) -> tuple[int, int, int]:
+    """(pageNumber, pageSize, start) for a read from record ``start``.
+
+    Abnormal pages by number only, so a position is reached by asking for the page that holds
+    it (same page size) and skipping the records before it.
+    """
+    params = page_params(page_size, page_number)
+    size = params["pageSize"]
+    start = offset if offset is not None else (params["pageNumber"] - 1) * size
+    return start // size + 1, size, start
+
+
+def paged_result(document: Any, key: str, first: int = 0, start: int | None = None, paged: bool = True) -> dict[str, Any]:
+    """Shape an Abnormal list response as ``{items, count, page, has_more, next_page, offset, next_offset}``.
+
+    ``first`` is the position of the response's first record; items before ``start`` are
+    skipped. next_offset continues right after the last record returned, also when the result
+    is cut to fit the size limit (a page number cannot: the rest of a cut page is on no other
+    page). Without paging (``paged`` false, no filter) only a cut result gets a next_offset.
+    """
     doc = document if isinstance(document, dict) else {}
-    items = doc.get(key) or []
+    start = first if start is None else start
+    items = (doc.get(key) or [])[start - first :]
     next_page = doc.get("nextPageNumber")
-    return {
+    result = {
         "items": items,
         "count": len(items),
         "page": doc.get("pageNumber"),
         "has_more": next_page is not None,
         "next_page": next_page,
+        "offset": start,
     }
+    if paged and next_page is not None:
+        result["next_offset"] = start + len(items)
+    result["_resume"] = {"key": "next_offset", "start": start}
+    return result
 
 
 def path_id(value: Any) -> str:

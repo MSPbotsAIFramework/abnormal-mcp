@@ -22,10 +22,11 @@ from ..api_client import AbnormalClient
 from ._common import (
     READ_ONLY,
     ClientFactory,
+    Offset,
     PageNumber,
     PageSize,
     filter_arg,
-    page_params,
+    locate,
     paged_result,
     path_id,
     run_tool,
@@ -62,11 +63,12 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         recipient: Annotated[str | None, Field(description="Recipient name or e-mail address.")] = None,
         subject: Annotated[str | None, Field(description="E-mail subject text.")] = None,
         attackType: AttackType | None = None,
+        offset: Offset = None,
     ) -> str:
         """List threat IDs from the Threat Log, newest first.
 
         Without `filter` only the latest 100 threats are returned and paging is
-        ignored. Use abnormal_threats_get for a threat's messages and details.
+        ignored (offset then skips into those 100). Use abnormal_threats_get for a threat's messages and details.
         """
 
         async def action(client: AbnormalClient) -> dict:
@@ -78,9 +80,11 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
                 "subject": subject,
                 "attackType": attackType,
             }
-            if filter:
-                params |= page_params(pageSize, pageNumber)
-            return paged_result(await client.get("/threats", params), "threats")
+            if not filter:
+                return paged_result(await client.get("/threats", params), "threats", 0, offset or 0, paged=False)
+            number, size, start = locate(offset, pageNumber, pageSize)
+            params |= {"pageSize": size, "pageNumber": number}
+            return paged_result(await client.get("/threats", params), "threats", (number - 1) * size, start)
 
         return await run_tool("abnormal_threats_list", client_factory, action)
 

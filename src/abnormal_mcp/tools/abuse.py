@@ -22,10 +22,11 @@ from ..api_client import AbnormalClient
 from ._common import (
     READ_ONLY,
     ClientFactory,
+    Offset,
     PageNumber,
     PageSize,
     filter_arg,
-    page_params,
+    locate,
     paged_result,
     run_tool,
 )
@@ -44,6 +45,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         sender: Annotated[str | None, Field(description="Sender name or e-mail address.")] = None,
         recipient: Annotated[str | None, Field(description="Recipient name or e-mail address.")] = None,
         subject: Annotated[str | None, Field(description="E-mail subject text.")] = None,
+        offset: Offset = None,
     ) -> str:
         """List campaigns employees reported to the AI Security Mailbox (formerly Abuse Mailbox).
 
@@ -51,7 +53,8 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """
 
         async def action(client: AbnormalClient) -> dict:
-            params = page_params(pageSize, pageNumber) | {
+            number, size, start = locate(offset, pageNumber, pageSize)
+            params = {"pageSize": size, "pageNumber": number} | {
                 "filter": filter,
                 "threatType": threatType,
                 "reporter": reporter,
@@ -59,6 +62,6 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
                 "recipient": recipient,
                 "subject": subject,
             }
-            return paged_result(await client.get("/abusecampaigns", params), "campaigns")
+            return paged_result(await client.get("/abusecampaigns", params), "campaigns", (number - 1) * size, start)
 
         return await run_tool("abnormal_abuse_list", client_factory, action)

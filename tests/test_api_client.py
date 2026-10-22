@@ -122,7 +122,8 @@ async def test_threats_list_pages_only_with_filter(monkeypatch):
     )
     assert "pageSize" not in seen[0]
     assert seen[1]["pageSize"] == "100" and seen[1]["pageNumber"] == "3"
-    assert with_filter == {"items": [{"threatId": "a"}], "count": 1, "page": 1, "has_more": True, "next_page": 2}
+    assert with_filter == {"items": [{"threatId": "a"}], "count": 1, "page": 1, "has_more": True, "next_page": 2,
+                           "offset": 200, "next_offset": 201}
     assert no_filter["count"] == 1
 
 
@@ -209,3 +210,132 @@ async def test_cases_get_rejects_blank_id(monkeypatch):
     _use_mock(monkeypatch, lambda r: pytest.fail("API must not be called"))
     result = await _call("abnormal_cases_get", {"caseId": "  "})
     assert result["error"]["code"] == "invalid_argument"
+
+
+# ---- Page-number paging that survives truncation (offset / next_offset) -----------------------------
+# Self-test checklist: a cut page continues right after the last record returned (from page 1 and
+# from a later page); offset aligned / not aligned to a page; offset past the end; offset wins over
+# pageNumber; pageNumber-only calls send the same request as before; no retry hint for a page size.
+
+TOTAL = 137
+FILTER = "receivedTime gte 2026-01-01T00:00:00Z"
+BIG = {f"f{k}": f"value {k}" for k in range(40)}
+
+# tool, path, list field, id field, extra arguments
+PAGED_TOOLS = [
+    ("abnormal_threats_list", "/v1/threats", "threats", "threatId", {"filter": FILTER}),
+    ("abnormal_abuse_list", "/v1/abusecampaigns", "campaigns", "campaignId", {}),
+    ("abnormal_cases_list", "/v1/cases", "cases", "caseId", {"filter": "lastModifiedTime gte 2026-01-01T00:00:00Z"}),
+]
+
+
+def _rows(id_field, big=True):
+    return [{id_field: f"r{i:03d}", **(BIG if big else {})} for i in range(TOTAL)]
+
+
+def _paged_api(key, rows, seen):
+    """Pages by pageNumber / pageSize like Abnormal; without paging returns the latest 100."""
+
+    def reply(request):
+        params = dict(request.url.params)
+        seen.append(params)
+        if "pageNumber" not in params:
+            return httpx.Response(200, json={key: rows[:100]})
+        number, size = int(params["pageNumber"]), int(params["pageSize"])
+        doc = {key: rows[(number - 1) * size : number * size], "pageNumber": number}
+        if number * size < len(rows):
+            doc["nextPageNumber"] = number + 1
+        return httpx.Response(200, json=doc)
+
+    return reply
+
+
+async def _walk(tool, id_field, args):
+    ids, calls, cut = [], 0, 0
+    while True:
+        result = await _call(tool, args)
+        calls += 1
+        assert "retry_page_size" not in result, result.get("note")
+        cut += bool(result.get("truncated"))
+        ids += [r[id_field] for r in result["items"]]
+        if result.get("next_offset") is None:
+            return ids, cut
+        args = {k: v for k, v in args.items() if k != "pageNumber"} | {"offset": result["next_offset"]}
+        assert calls < 200
+
+
+@pytest.mark.parametrize("tool,path,key,id_field,extra", PAGED_TOOLS)
+async def test_cut_pages_continue_without_gaps_from_page_1(monkeypatch, tool, path, key, id_field, extra):
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field), []))
+    ids, cut = await _walk(tool, id_field, extra | {"pageSize": 50})
+    assert cut > 0  # pages really were cut
+    assert ids == [f"r{i:03d}" for i in range(TOTAL)]  # no gaps, no duplicates
+
+
+@pytest.mark.parametrize("tool,path,key,id_field,extra", PAGED_TOOLS)
+async def test_cut_pages_continue_without_gaps_from_a_later_page(monkeypatch, tool, path, key, id_field, extra):
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field), []))
+    ids, cut = await _walk(tool, id_field, extra | {"pageNumber": 3, "pageSize": 40})
+    assert cut > 0
+    assert ids == [f"r{i:03d}" for i in range(80, TOTAL)]
+
+
+@pytest.mark.parametrize("tool,path,key,id_field,extra", PAGED_TOOLS)
+@pytest.mark.parametrize("offset,size,page,first", [(30, 25, 2, "r030"), (50, 25, 3, "r050"), (0, 25, 1, "r000")])
+async def test_offset_reads_the_page_that_holds_it(
+    monkeypatch, tool, path, key, id_field, extra, offset, size, page, first
+):
+    seen = []
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field, big=False), seen))
+    result = await _call(tool, extra | {"offset": offset, "pageSize": size})
+    assert (seen[0]["pageNumber"], seen[0]["pageSize"]) == (str(page), str(size))
+    assert [r[id_field] for r in result["items"]] == [f"r{i:03d}" for i in range(offset, page * size)]
+    assert result["items"][0][id_field] == first and result["offset"] == offset
+    assert result["next_offset"] == page * size  # rest of the page returned, next page starts after it
+
+
+@pytest.mark.parametrize("tool,path,key,id_field,extra", PAGED_TOOLS)
+async def test_offset_past_the_end_is_empty(monkeypatch, tool, path, key, id_field, extra):
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field, big=False), []))
+    result = await _call(tool, extra | {"offset": 500, "pageSize": 25})
+    assert (result["count"], result["has_more"], result.get("next_offset")) == (0, False, None)
+
+
+@pytest.mark.parametrize("tool,path,key,id_field,extra", PAGED_TOOLS)
+async def test_offset_wins_over_page_number(monkeypatch, tool, path, key, id_field, extra):
+    seen = []
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field, big=False), seen))
+    result = await _call(tool, extra | {"offset": 10, "pageNumber": 4, "pageSize": 10})
+    assert seen[0]["pageNumber"] == "2" and result["items"][0][id_field] == "r010"
+
+
+@pytest.mark.parametrize("tool,path,key,id_field,extra", PAGED_TOOLS)
+async def test_page_number_only_sends_the_same_request_as_before(monkeypatch, tool, path, key, id_field, extra):
+    seen = []
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field, big=False), seen))
+    result = await _call(tool, extra | {"pageNumber": 2, "pageSize": 25})
+    assert seen[0] == extra | {"pageSize": "25", "pageNumber": "2"}
+    assert [r[id_field] for r in result["items"]] == [f"r{i:03d}" for i in range(25, 50)]
+    assert (result["page"], result["offset"], result["next_offset"], result["has_more"]) == (2, 25, 50, True)
+    assert result["next_page"] == 3
+
+
+async def test_default_page_size_is_used_for_an_offset(monkeypatch):
+    seen = []
+    _use_mock(monkeypatch, _paged_api("campaigns", _rows("campaignId", big=False), seen))
+    result = await _call("abnormal_abuse_list", {"offset": 60})
+    assert (seen[0]["pageNumber"], seen[0]["pageSize"]) == ("2", "50")
+    assert result["items"][0]["campaignId"] == "r060" and result["next_offset"] == 100
+
+
+@pytest.mark.parametrize("tool,key,id_field", [("abnormal_threats_list", "threats", "threatId"),
+                                               ("abnormal_cases_list", "cases", "caseId")])
+async def test_without_filter_a_cut_latest_100_continues_by_offset(monkeypatch, tool, key, id_field):
+    seen = []
+    _use_mock(monkeypatch, _paged_api(key, _rows(id_field), seen))
+    ids, cut = await _walk(tool, id_field, {})
+    assert cut > 0 and ids == [f"r{i:03d}" for i in range(100)]
+    assert all("pageNumber" not in params and "pageSize" not in params for params in seen)
+    plain = await _call(tool, {"offset": 95})
+    assert [r[id_field] for r in plain["items"]] == [f"r{i:03d}" for i in range(95, 100)]
+    assert "next_offset" not in plain

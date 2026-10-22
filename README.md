@@ -33,21 +33,25 @@ regions.
 
 ## Tools
 
-All tools return a JSON string. List tools return `{items, count, page, has_more, next_page}`.
+All tools return a JSON string. List tools return `{items, count, page, has_more, next_page}`
+plus `offset` / `next_offset`.
 Abnormal only pages when a time `filter` is given (`<key> gte <time> lte <time>`, times like
 `2026-01-31T00:00:00Z`); without one the threat and case lists return the latest 100 IDs.
+A page cut to fit the 20,000-character response limit has its rest on no other page number, so
+the list tools also take `offset` (record position, overriding `pageNumber`); pass back
+`next_offset`, which starts right after the last record returned, to read every record once.
 
 | Tool | Purpose | Parameters (required in **bold**) |
 |---|---|---|
 | `abnormal_navigate` | Show the tools of one area | **domain** (`threats`, `messages`, `remediation`, `abuse`, `cases`) |
 | `abnormal_status` | Check that the token works | - |
-| `abnormal_threats_list` | List threat IDs from the Threat Log | pageSize, pageNumber, filter (`receivedTime` / `latestTimeRemediated`), source, sender, recipient, subject, attackType |
+| `abnormal_threats_list` | List threat IDs from the Threat Log | pageSize, pageNumber, filter (`receivedTime` / `latestTimeRemediated`), source, sender, recipient, subject, attackType, offset |
 | `abnormal_threats_get` | One threat with its messages | **threatId** |
 | `abnormal_messages_list` | Messages of one threat (summary) | **threatId** |
 | `abnormal_messages_get` | Full record of one message | **threatId**, **messageId** |
 | `abnormal_remediation_manage` | Remediation status, or remediate / unremediate (**changes mailboxes**) | **threatId**, **messageId**, **action** (`status`, `remediate`, `unremediate`), actionId |
-| `abnormal_abuse_list` | Campaigns reported to the AI Security Mailbox | pageSize, pageNumber, filter (`lastReportedTime` / `receivedTime`), threatType, reporter, sender, recipient, subject |
-| `abnormal_cases_list` | Account-takeover cases | pageSize, pageNumber, filter (`lastModifiedTime`) |
+| `abnormal_abuse_list` | Campaigns reported to the AI Security Mailbox | pageSize, pageNumber, filter (`lastReportedTime` / `receivedTime`), threatType, reporter, sender, recipient, subject, offset |
+| `abnormal_cases_list` | Account-takeover cases | pageSize, pageNumber, filter (`lastModifiedTime`), offset |
 | `abnormal_cases_get` | One case | **caseId** |
 
 `pageSize` defaults to 50 (Abnormal's maximum is 100).

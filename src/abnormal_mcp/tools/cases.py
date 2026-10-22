@@ -22,10 +22,11 @@ from ..api_client import AbnormalClient
 from ._common import (
     READ_ONLY,
     ClientFactory,
+    Offset,
     PageNumber,
     PageSize,
     filter_arg,
-    page_params,
+    locate,
     paged_result,
     path_id,
     run_tool,
@@ -38,6 +39,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         pageSize: PageSize = None,
         pageNumber: PageNumber = None,
         filter: filter_arg("lastModifiedTime") = None,
+        offset: Offset = None,
     ) -> str:
         """List account-takeover cases (case ID, severity, affected employee).
 
@@ -47,9 +49,11 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
 
         async def action(client: AbnormalClient) -> dict:
             params = {"filter": filter}
-            if filter:
-                params |= page_params(pageSize, pageNumber)
-            return paged_result(await client.get("/cases", params), "cases")
+            if not filter:
+                return paged_result(await client.get("/cases", params), "cases", 0, offset or 0, paged=False)
+            number, size, start = locate(offset, pageNumber, pageSize)
+            params |= {"pageSize": size, "pageNumber": number}
+            return paged_result(await client.get("/cases", params), "cases", (number - 1) * size, start)
 
         return await run_tool("abnormal_cases_list", client_factory, action)
 
