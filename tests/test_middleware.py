@@ -52,6 +52,19 @@ def test_missing_token_returns_401(value):
     assert resp.json()["required_headers"] == ["Authorization"]
 
 
+def test_case_manage_requires_authorization_header():
+    call = {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {"name": "abnormal_case_manage", "arguments": {"caseId": "1", "action": "acknowledge"}},
+    }
+    with _client() as client:
+        resp = client.post("/mcp", json=call, headers=MCP_HEADERS)
+    assert resp.status_code == 401
+    assert resp.json()["required_headers"] == ["Authorization"]
+
+
 def test_unknown_region_still_lists_tools():
     # The admin console refreshes the tool catalog with placeholder header values.
     headers = {"Authorization": "placeholder", "X-Abnormal-Region": "placeholder"}
