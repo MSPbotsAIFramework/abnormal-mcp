@@ -34,9 +34,15 @@ EXPECTED_TOOLS: dict[str, set[str]] = {
     "abnormal_abuse_list": set(),
     "abnormal_cases_list": set(),
     "abnormal_cases_get": {"caseId"},
+    "abnormal_case_manage": {"caseId", "action"},
 }
 
-WRITE_TOOLS = {"abnormal_remediation_manage"}
+# name -> (readOnlyHint, destructiveHint). Tools not listed here are read-only
+# (readOnlyHint=True; destructiveHint is unset for those).
+WRITE_TOOLS: dict[str, tuple[bool, bool]] = {
+    "abnormal_remediation_manage": (False, True),
+    "abnormal_case_manage": (False, False),
+}
 
 
 @pytest.fixture(scope="module")
@@ -73,8 +79,9 @@ def test_annotations(tools, name):
     annotations = tools[name].annotations
     assert annotations is not None
     if name in WRITE_TOOLS:
-        assert annotations.readOnlyHint is False
-        assert annotations.destructiveHint is True
+        read_only, destructive = WRITE_TOOLS[name]
+        assert annotations.readOnlyHint is read_only
+        assert annotations.destructiveHint is destructive
     else:
         assert annotations.readOnlyHint is True
 

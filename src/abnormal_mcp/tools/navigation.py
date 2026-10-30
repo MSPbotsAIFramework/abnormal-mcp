@@ -40,6 +40,7 @@ DOMAIN_TOOLS: dict[str, dict[str, str]] = {
     "cases": {
         "abnormal_cases_list": "Account-takeover cases.",
         "abnormal_cases_get": "One case with analysis and related threats.",
+        "abnormal_case_manage": "Acknowledge, or check the status of an action on, an account-takeover case.",
     },
 }
 

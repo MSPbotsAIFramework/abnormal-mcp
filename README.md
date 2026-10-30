@@ -125,6 +125,7 @@ the list tools also take `offset` (record position, overriding `pageNumber`); pa
 | `abnormal_abuse_list` | Campaigns reported to the AI Security Mailbox | pageSize, pageNumber, filter (`lastReportedTime` / `receivedTime`), threatType, reporter, sender, recipient, subject, offset |
 | `abnormal_cases_list` | Account-takeover cases | pageSize, pageNumber, filter (`lastModifiedTime`), offset |
 | `abnormal_cases_get` | One case | **caseId** |
+| `abnormal_case_manage` | Acknowledge a case, or check the status of a previous action | **caseId**, **action** (`status`, or any action name, e.g. `acknowledge`), actionId |
 
 `pageSize` defaults to 50 (Abnormal's maximum is 100).
 
@@ -190,6 +191,11 @@ uv run pytest
   `messageId` is used for the `status` action (remediation history of that message).
 - **Message limits.** Abnormal returns at most 10 messages per threat on the threat-detail
   endpoint, which `abnormal_threats_get` and `abnormal_messages_list` use.
+- **Case actions.** `abnormal_case_manage` mirrors `abnormal_remediation_manage`'s shape
+  (an `action` string plus a `status` branch), but it is **not** `destructiveHint=true`:
+  acknowledging a case does not change mailbox content, unlike threat remediation. The set
+  of legal `action` values is not a documented closed enum, so the tool accepts any string
+  and lets Abnormal's own API reject an unsupported one (surfaced as `invalid_argument`).
 
 ## License
 

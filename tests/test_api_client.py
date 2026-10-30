@@ -212,6 +212,45 @@ async def test_cases_get_rejects_blank_id(monkeypatch):
     assert result["error"]["code"] == "invalid_argument"
 
 
+async def test_case_manage_acknowledge_posts_to_actions_endpoint(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, request.url.path, request.content))
+        return httpx.Response(202, json={"actionId": "act-9", "status_url": "https://example.com/s"})
+
+    _use_mock(monkeypatch, handler)
+    result = await _call("abnormal_case_manage", {"caseId": "19377", "action": "acknowledge"})
+    assert seen == [("POST", "/v1/cases/19377/actions", b'{"action":"acknowledge"}')]
+    assert result == {"caseId": "19377", "action": "acknowledge", "actionId": "act-9", "status_url": "https://example.com/s"}
+
+
+async def test_case_manage_status_gets_action_by_id(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.path)
+        return httpx.Response(200, json={"status": "completed"})
+
+    _use_mock(monkeypatch, handler)
+    result = await _call("abnormal_case_manage", {"caseId": "19377", "action": "status", "actionId": "act-9"})
+    assert seen == ["/v1/cases/19377/actions/act-9"]
+    assert result == {"status": "completed"}
+
+
+async def test_case_manage_status_without_action_id_is_invalid_argument(monkeypatch):
+    _use_mock(monkeypatch, lambda r: pytest.fail("API must not be called"))
+    result = await _call("abnormal_case_manage", {"caseId": "19377", "action": "status"})
+    assert result["error"]["code"] == "invalid_argument"
+    assert "actionId" in result["error"]["message"]
+
+
+async def test_case_manage_unknown_case_returns_not_found_envelope(monkeypatch):
+    _use_mock(monkeypatch, lambda r: httpx.Response(404, json={"message": "Case not found"}))
+    result = await _call("abnormal_case_manage", {"caseId": "does-not-exist", "action": "acknowledge"})
+    assert result["error"]["code"] == "not_found"
+
+
 # ---- Page-number paging that survives truncation (offset / next_offset) -----------------------------
 # Self-test checklist: a cut page continues right after the last record returned (from page 1 and
 # from a later page); offset aligned / not aligned to a page; offset past the end; offset wins over

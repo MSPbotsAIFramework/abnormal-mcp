@@ -13,9 +13,10 @@
 # limitations under the License.
 """Cases: account-takeover investigations (Account Takeover license)."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..api_client import AbnormalClient
@@ -70,3 +71,38 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             return await client.get(f"/cases/{path_id(case_id)}")
 
         return await run_tool("abnormal_cases_get", client_factory, action)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+        )
+    )
+    async def abnormal_case_manage(
+        caseId: Annotated[int | str, Field(description="Case ID from abnormal_cases_list (number or string).")],
+        action: Annotated[
+            str,
+            Field(description="status = read only; any other value (e.g. 'acknowledge') submits that action."),
+        ],
+        actionId: Annotated[
+            str | None,
+            Field(description="With action=status: an action ID returned by a previous action."),
+        ] = None,
+    ) -> str:
+        """Acknowledge, or check the status of, an action on an account-takeover case.
+
+        status requires actionId and reads that action's progress. Any other
+        action (e.g. acknowledge) submits it and returns its actionId.
+        Submitting the same action twice is Abnormal's own concern, not this
+        server's.
+        """
+
+        async def run(client: AbnormalClient) -> Any:
+            case_id = path_id(caseId)
+            if action == "status":
+                if not actionId:
+                    raise ValueError("actionId is required when action='status'")
+                return await client.get(f"/cases/{case_id}/actions/{path_id(actionId)}")
+            result = await client.post(f"/cases/{case_id}/actions", body={"action": action})
+            return {"caseId": caseId, "action": action, **(result or {})}
+
+        return await run_tool("abnormal_case_manage", client_factory, run)

@@ -4,42 +4,54 @@
     "ac": "AC1",
     "text": "Given a valid Abnormal API token and an existing case ID, when abnormal_case_manage(caseId, action=\"acknowledge\") is called, then the tool returns the actionId from Abnormal's response.",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_case_manage_acknowledge_posts_to_actions_endpoint"]
+    "tests": ["tests/test_api_client.py::test_case_manage_acknowledge_posts_to_actions_endpoint"],
+    "result": "pass",
+    "evidence": "uv run pytest -v tests/test_api_client.py::test_case_manage_acknowledge_posts_to_actions_endpoint -> PASSED (2026-10-30, dev/PRD-21219). Moved from test_tools.py (design's suggested location) to test_api_client.py to match this repo's existing convention for mocked-HTTP behavior tests (see test_remediation_status_reads_history_and_remediate_posts in the same file) -- execution method only, AC content unchanged."
   },
   {
     "id": "TC2",
     "ac": "AC2",
     "text": "Given an actionId returned by a previous case action, when abnormal_case_manage(caseId, action=\"status\", actionId=...) is called, then the tool returns the status document for that action.",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_case_manage_status_gets_action_by_id"]
+    "tests": ["tests/test_api_client.py::test_case_manage_status_gets_action_by_id"],
+    "result": "pass",
+    "evidence": "uv run pytest -v tests/test_api_client.py::test_case_manage_status_gets_action_by_id -> PASSED (2026-10-30, dev/PRD-21219). Same test-location note as TC1."
   },
   {
     "id": "TC3",
     "ac": "AC3",
     "text": "Given a case ID Abnormal does not recognize, when any action is requested, then the tool returns the standard not_found error envelope, not an exception.",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_case_manage_unknown_case_returns_not_found_envelope"]
+    "tests": ["tests/test_api_client.py::test_case_manage_unknown_case_returns_not_found_envelope"],
+    "result": "pass",
+    "evidence": "uv run pytest -v tests/test_api_client.py::test_case_manage_unknown_case_returns_not_found_envelope -> PASSED (2026-10-30, dev/PRD-21219). Same test-location note as TC1."
   },
   {
     "id": "TC4",
     "ac": "AC4",
     "text": "Given a request to the server with no Authorization header, when abnormal_case_manage is called, then the server returns the same 401 behavior already enforced for every other tool.",
     "type": "auto",
-    "tests": ["tests/test_middleware.py::test_case_manage_requires_authorization_header"]
+    "tests": ["tests/test_middleware.py::test_case_manage_requires_authorization_header"],
+    "result": "pass",
+    "evidence": "uv run pytest -v tests/test_middleware.py::test_case_manage_requires_authorization_header -> PASSED (2026-10-30, dev/PRD-21219): a tools/call for abnormal_case_manage with no Authorization header gets HTTP 401 and required_headers == ['Authorization'], same as every other tool (middleware runs before tool dispatch)."
   },
   {
     "id": "TC5",
     "ac": "AC5",
     "text": "Given abnormal_case_manage is registered, when abnormal_navigate(domain=\"cases\") is called, then abnormal_case_manage appears in the returned tool list for that domain.",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_navigate_covers_every_tool"]
+    "tests": ["tests/test_tools.py::test_navigate_covers_every_tool"],
+    "result": "pass",
+    "evidence": "uv run pytest -v tests/test_tools.py::test_navigate_covers_every_tool -> PASSED (2026-10-30, dev/PRD-21219). This pre-existing parametrized test automatically covers the new tool once navigation.py's DOMAIN_TOOLS['cases'] was extended -- no new test needed; it would fail if abnormal_case_manage were missing from the domain index. Also manually confirmed via scratch/PRD-21219/smoke.py: tools/list over HTTP lists 11 tools including abnormal_case_manage."
   },
   {
     "id": "TC6",
     "ac": "AC2",
     "text": "Given action=\"status\" with no actionId, when abnormal_case_manage is called, then the tool returns an invalid_argument error envelope, not an exception.",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_case_manage_status_without_action_id_is_invalid_argument"]
+    "tests": ["tests/test_api_client.py::test_case_manage_status_without_action_id_is_invalid_argument"],
+    "result": "pass",
+    "evidence": "uv run pytest -v tests/test_api_client.py::test_case_manage_status_without_action_id_is_invalid_argument -> PASSED (2026-10-30, dev/PRD-21219). Same test-location note as TC1."
   },
   {
     "id": "TC7",
